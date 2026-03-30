@@ -3,6 +3,172 @@ import os
 from datetime import datetime, timedelta
 import numpy as np
 import pickle
+from sklearn.preprocessing import LabelEncoder
+
+
+def encode_categorical_features(dataframes):
+    """
+    Encode categorical features in customer, asset, transaction, and market dataframes.
+    
+    Categorical features encoded:
+    - Customer: customerType, riskLevel, investmentCapacity
+    - Asset: assetCategory, assetSubCategory, marketID, sector, industry
+    - Transaction: transactionType, channel
+    - Market: country, marketClass
+    
+    Note: NaN values are replaced with "Unknown" category before encoding to ensure
+    all rows can be encoded without missing values.
+    
+    Args:
+        dataframes: dict of loaded dataframes
+    
+    Returns:
+        tuple: (dataframes_updated, encodings_dict) where:
+            - dataframes_updated: modified dataframes with encoded categorical features
+            - encodings_dict: dict containing all encoders and their mappings for reversal
+    """
+    encodings = {
+        'customer_encoders': {},
+        'asset_encoders': {},
+        'transaction_encoders': {},
+        'market_encoders': {},
+        'customer_mappings': {},
+        'asset_mappings': {},
+        'transaction_mappings': {},
+        'market_mappings': {}
+    }
+    
+    # Encode customer categorical features
+    print("\nEncoding customer categorical features...")
+    if 'customer_information' in dataframes:
+        df_customer = dataframes['customer_information'].copy()
+        customer_categorical_cols = ['customerType', 'riskLevel', 'investmentCapacity']
+        
+        for col in customer_categorical_cols:
+            if col in df_customer.columns:
+                # Convert categorical dtype to object (string) to allow adding 'Unknown' category
+                df_customer[col] = df_customer[col].astype('object')
+                
+                # Replace NaN with "Unknown" category
+                df_customer[col] = df_customer[col].fillna('Unknown')
+                
+                encoder = LabelEncoder()
+                # Fit the encoder on all values (including "Unknown")
+                unique_values = df_customer[col].unique()
+                encoder.fit(unique_values)
+                
+                # Store encoder and mapping for reversal
+                encodings['customer_encoders'][col] = encoder
+                encodings['customer_mappings'][col] = {
+                    'categories': list(encoder.classes_),
+                    'encoded_values': list(range(len(encoder.classes_)))
+                }
+                
+                # Apply encoding
+                df_customer[col] = encoder.transform(df_customer[col])
+                print(f"  ✓ Encoded {col}: {len(encoder.classes_)} unique classes (including 'Unknown' for NaN)")
+        
+        dataframes['customer_information'] = df_customer
+    
+    # Encode asset categorical features
+    print("\nEncoding asset categorical features...")
+    if 'asset_information' in dataframes:
+        df_asset = dataframes['asset_information'].copy()
+        asset_categorical_cols = ['assetCategory', 'assetSubCategory', 'sector', 'industry']
+        
+        for col in asset_categorical_cols:
+            if col in df_asset.columns:
+                # Convert categorical dtype to object (string) to allow adding 'Unknown' category
+                df_asset[col] = df_asset[col].astype('object')
+                
+                # Replace NaN with "Unknown" category
+                df_asset[col] = df_asset[col].fillna('Unknown')
+                
+                encoder = LabelEncoder()
+                # Fit the encoder on all values (including "Unknown")
+                unique_values = df_asset[col].unique()
+                encoder.fit(unique_values)
+                
+                # Store encoder and mapping for reversal
+                encodings['asset_encoders'][col] = encoder
+                encodings['asset_mappings'][col] = {
+                    'categories': list(encoder.classes_),
+                    'encoded_values': list(range(len(encoder.classes_)))
+                }
+                
+                # Apply encoding
+                df_asset[col] = encoder.transform(df_asset[col])
+                print(f"  ✓ Encoded {col}: {len(encoder.classes_)} unique classes (including 'Unknown' for NaN)")
+        
+        dataframes['asset_information'] = df_asset
+    
+    # Encode transaction categorical features
+    print("\nEncoding transaction categorical features...")
+    if 'transactions' in dataframes:
+        df_transactions = dataframes['transactions'].copy()
+        transaction_categorical_cols = ['transactionType', 'channel']
+        
+        for col in transaction_categorical_cols:
+            if col in df_transactions.columns:
+                # Convert categorical dtype to object (string) to allow adding 'Unknown' category
+                df_transactions[col] = df_transactions[col].astype('object')
+                
+                # Replace NaN with "Unknown" category
+                df_transactions[col] = df_transactions[col].fillna('Unknown')
+                
+                encoder = LabelEncoder()
+                # Fit the encoder on all values (including "Unknown")
+                unique_values = df_transactions[col].unique()
+                encoder.fit(unique_values)
+                
+                # Store encoder and mapping for reversal
+                encodings['transaction_encoders'][col] = encoder
+                encodings['transaction_mappings'][col] = {
+                    'categories': list(encoder.classes_),
+                    'encoded_values': list(range(len(encoder.classes_)))
+                }
+                
+                # Apply encoding
+                df_transactions[col] = encoder.transform(df_transactions[col])
+                print(f"  ✓ Encoded {col}: {len(encoder.classes_)} unique classes (including 'Unknown' for NaN)")
+        
+        dataframes['transactions'] = df_transactions
+    
+    # Encode market categorical features
+    print("\nEncoding market categorical features...")
+    if 'markets' in dataframes:
+        df_markets = dataframes['markets'].copy()
+        market_categorical_cols = ['country', 'marketClass']
+        
+        for col in market_categorical_cols:
+            if col in df_markets.columns:
+                # Convert categorical dtype to object (string) to allow adding 'Unknown' category
+                df_markets[col] = df_markets[col].astype('object')
+                
+                # Replace NaN with "Unknown" category
+                df_markets[col] = df_markets[col].fillna('Unknown')
+                
+                encoder = LabelEncoder()
+                # Fit the encoder on all values (including "Unknown")
+                unique_values = df_markets[col].unique()
+                encoder.fit(unique_values)
+                
+                # Store encoder and mapping for reversal
+                encodings['market_encoders'][col] = encoder
+                encodings['market_mappings'][col] = {
+                    'categories': list(encoder.classes_),
+                    'encoded_values': list(range(len(encoder.classes_)))
+                }
+                
+                # Apply encoding
+                df_markets[col] = encoder.transform(df_markets[col])
+                print(f"  ✓ Encoded {col}: {len(encoder.classes_)} unique classes (including 'Unknown' for NaN)")
+        
+        dataframes['markets'] = df_markets
+    
+    print("✓ Categorical feature encoding complete")
+    return dataframes, encodings
+
 
 def preprocess_data():
     """
@@ -149,7 +315,18 @@ def preprocess_data():
     # Create processed directory if it doesn't exist
     os.makedirs(processed_data_path, exist_ok=True)
     
+    # Generate time-based dataset variants (following paper methodology)
+    print("\nPreprocessing data...")
+    
+    # Encode categorical features before generating datasets
+    print("\n" + "="*70)
+    print("STEP 1: Encoding categorical features...")
+    print("="*70)
+    dataframes, encodings = encode_categorical_features(dataframes)
+    
+    print("\n" + "="*70)
     print("\nSaving processed dataframes...")
+    print("="*70)
     for df_name, df in dataframes.items():
         try:
             output_path = os.path.join(processed_data_path, f"{df_name}.csv")
@@ -158,16 +335,17 @@ def preprocess_data():
         except Exception as e:
             print(f"✗ Error saving {df_name}.csv: {str(e)}")
     
-    # Generate time-based dataset variants (following paper methodology)
-    print("\nGenerating the time-based dataset variants...")
-    generate_datasets(dataframes, processed_data_path)
+    # Generate dataset variants with encoding information
+    print("\n" + "="*70)
+    print("STEP 2: Generating time-based dataset variants...")
+    print("="*70)
+    generate_datasets(dataframes, processed_data_path, encodings)
     
     print("\n✓ Preprocessing complete! Use load_datasets() to load datasets for training.")
 
-
-def generate_datasets(dataframes, processed_data_path, num_variants=50):
+def generate_datasets(dataframes, processed_data_path, encodings, num_variants=30):
     """
-    Generate time-based dataset variants following the paper's methodology.
+    Generate time-based dataset variants following the FAR-Trans paper's methodology.
     
     Creates variants of the dataset, each with:
     - Training data: all transactions and prices prior to time t
@@ -176,17 +354,20 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
     First time point t0 is August 1st, 2019.
     Time points are spaced 2 weeks apart.
     
+    All relevance matrices use globally-consistent customer and asset indices across variants,
+    ensuring consistency for model training and evaluation.
+    
     Constraints/Filtering rules applied:
     - If a customer acquires (buys) an asset in both training and test, keep only training
     - Keep only customers with at least one interaction in both training and test
     
     Args:
-        dataframes: dict of loaded dataframes
+        dataframes: dict of loaded dataframes with encoded features
         processed_data_path: path to data/processed folder
         num_variants: number of time-based variants to generate (default 50)
     
     Returns:
-        dict: Contains metadata and lists of training/test matrices for each variant
+        dict: Contains metadata (with all encodings) and datasets with globally-indexed matrices
     """
     print("\n" + "="*70)
     print("Generating dataset variants (following paper methodology)...")
@@ -210,7 +391,8 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
             't0': t0,
             'test_period': test_period,
             'time_step': time_step,
-            'time_points': time_points
+            'time_points': time_points,
+            'encodings': encodings  # Store categorical feature encodings with datasets
         },
         'datasets': []
     }
@@ -223,12 +405,27 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
     
     # Get date range of data
     transactions['timestamp'] = pd.to_datetime(transactions['timestamp'])
+
+    # The spectrum of available assets
+    all_assets = sorted(list(asset_information["ISIN"].unique()))
     
     min_transaction_date = transactions['timestamp'].min()
     max_transaction_date = transactions['timestamp'].max()
     
     print(f"\nData availability:")
     print(f"Transactions: {min_transaction_date.strftime('%Y-%m-%d')} to {max_transaction_date.strftime('%Y-%m-%d')}")
+    
+    # Get the encoded value for 'Buy' transaction type
+    buy_encoded = None
+    if 'transaction_mappings' in encodings and 'transactionType' in encodings['transaction_mappings']:
+        categories = encodings['transaction_mappings']['transactionType']['categories']
+        if 'Buy' in categories:
+            buy_encoded = categories.index('Buy')
+    
+    if buy_encoded is None:
+        raise ValueError("Could not find encoded value for 'Buy' transactionType. Check encodings.")
+    
+    print(f"Using encoded value {buy_encoded} for 'Buy' transactions")
     
     # Generate variants
     for idx, t_current in enumerate(time_points):
@@ -246,14 +443,14 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
         train_transactions = transactions[
             (transactions['timestamp'] >= training_start) & 
             (transactions['timestamp'] < training_end) &
-            (transactions['transactionType'] == 'Buy')
+            (transactions['transactionType'] == buy_encoded)
         ].copy()
         
         # Get test investment transactions (in period (t_current, t_current + 6 months)) - only Buy transactions
         test_transactions = transactions[
             (transactions['timestamp'] >= training_end) & 
             (transactions['timestamp'] < test_end) &
-            (transactions['transactionType'] == 'Buy')
+            (transactions['transactionType'] == buy_encoded)
         ].copy()
         
         # Apply filtering rules        
@@ -273,16 +470,38 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
         test_transactions = test_transactions[
             ~test_transactions.apply(lambda row: (row['customerID'], row['ISIN']) in train_pairs, axis=1)
         ].copy()
+            
+        # Build count-based interaction matrix for the training transactions
+        train_rel_matrix, train_indices = build_rel_matrix(
+            train_transactions, customers=kept_customers, all_assets=all_assets
+        )
         
-        # Create binary interaction matrices for the train and test sets
-        # For each amtrix consider all the spectrum of avaialble assets
-        all_assets = sorted(list(asset_information["ISIN"].unique()))
+        # Build count-based interaction matrix for the testing transactions
+        test_rel_matrix, test_indices = build_rel_matrix(
+            test_transactions, customers=kept_customers, all_assets=all_assets
+        )
         
-        # Build binary interaction matrix for the training transactions
-        train_rel_matrix = build_rel_matrix(train_transactions, all_assets=all_assets)
+        # Print a sample row with non-zero values from training matrix
+        # train_sample_printed = False
+        # for i in range(train_rel_matrix.shape[0]):
+        #     if np.any(train_rel_matrix[i, :] > 0):
+        #         customer_id = train_indices['customer_local_idx_to_id'][i]
+        #         nonzero_indices = np.nonzero(train_rel_matrix[i, :])[0]
+        #         asset_values = [(train_indices['asset_local_idx_to_id'][j], train_rel_matrix[i, j]) for j in nonzero_indices]
+        #         print(f"  Sample training row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
+        #         train_sample_printed = True
+        #         break
         
-        # Build binary interaction matrix for the testing transactions
-        test_rel_matrix = build_rel_matrix(test_transactions, all_assets=all_assets)
+        # # Print a sample row with non-zero values from test matrix
+        # test_sample_printed = False
+        # for i in range(test_rel_matrix.shape[0]):
+        #     if np.any(test_rel_matrix[i, :] > 0):
+        #         customer_id = test_indices['customer_local_idx_to_id'][i]
+        #         nonzero_indices = np.nonzero(test_rel_matrix[i, :])[0]
+        #         asset_values = [(test_indices['asset_local_idx_to_id'][j], test_rel_matrix[i, j]) for j in nonzero_indices]
+        #         print(f"  Sample test row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
+        #         test_sample_printed = True
+        #         break
         
         # Store variant information
         variant_info = {
@@ -295,15 +514,17 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
             'train_transactions': train_transactions,
             'test_transactions': test_transactions,
             'train_rel_matrix': train_rel_matrix,
-            'test_rel_matrix': test_rel_matrix
+            'test_rel_matrix': test_rel_matrix,
+            'train_indices': train_indices,  # Customer and asset index mappings for training
+            'test_indices': test_indices      # Customer and asset index mappings for testing
         }
         
         datasets['datasets'].append(variant_info)
         
         print(f"✓ Generated variant t{idx} ({t_current.strftime('%Y-%m-%d')}): "
                 f"{len(train_transactions)} train transactions, {len(test_transactions)} test transactions, "
-                f"Train Rel matrix dims: {train_rel_matrix.shape} "
-                f"Test Rel matrix dims: {test_rel_matrix.shape}")
+                f"Train matrix dims: {train_rel_matrix.shape} (count-based), "
+                f"Test matrix dims: {test_rel_matrix.shape} (count-based)")
     
     print(f"\n✓ Successfully generated {len(datasets['datasets'])} dataset variants")
     
@@ -312,49 +533,84 @@ def generate_datasets(dataframes, processed_data_path, num_variants=50):
     
     return datasets
 
-def build_rel_matrix(transactions, all_assets):
+def build_rel_matrix(transactions, customers, all_assets):
     """
-    Build a full relevance matrix (Rel) with union dimensions.
+    Build a count-based relevance matrix (Rel) with local indexing for both customers and assets.
+    
+    The relevance matrix stores counts instead of binary values, reflecting the number of times
+    each customer acquired each asset.
+    
+    - Customer rows: Local indices for customers in this transaction set
+    - Asset columns: Local indices for assets in this transaction set
     
     Args:
         transactions: Transactions DataFrame with columns [customerID, ISIN]
-        all_customers: list of all unique customer IDs (with at least 1 transaction in the train and test sets)
+        customers: set of customer IDs to include
         all_assets: list of all available unique asset ISINs
     
     Returns:
-        pandas DataFrame: Rel matrix with shape (len(all_customers), len(all_assets))
-                        where Rel[u, i] = 1.0 if customer u bought asset i, else 0.0
+        tuple: (rel_matrix, indices_dict) where:
+            - rel_matrix: numpy array with shape (num_customers_in_set, num_assets_in_set)
+                         containing counts of acquisitions (dtype: float32)
+                         - rows: local indices for customers in this set
+                         - cols: local indices for assets in this set
+            - indices_dict: dict containing the mappings:
+                - 'customer_id_to_local_idx': Local {customerID -> local row index}
+                - 'customer_local_idx_to_id': Local {local row index -> customerID}
+                - 'asset_id_to_local_idx': Local {assetISIN -> local column index}
+                - 'asset_local_idx_to_id': Local {local column index -> assetISIN}
+                - 'num_customers_in_set': Number of customers in this set
+                - 'num_assets_in_set': Number of assets in this set
     """
-    # Create dictionary for fast lookup of indices
-    customers = sorted(list(transactions["customerID"].unique()))
-
-    customer_idx = {cid: i for i, cid in enumerate(customers)}
-    asset_idx = {isin: j for j, isin in enumerate(all_assets)}
+    # The customers with transactions both in the training and test transactions subsets
+    customers_in_set = sorted(list(customers))
+    num_customers = len(customers_in_set)
     
-    # Initialize matrix with zeros
-    rel_matrix = np.zeros((len(customers), len(all_assets)), dtype=np.float32)
+    # Create LOCAL customer index mappings
+    customer_id_to_local_idx = {cid: i for i, cid in enumerate(customers_in_set)}
+    customer_local_idx_to_id = {i: cid for i, cid in enumerate(customers_in_set)}
     
-    # Fill in interactions
+    # Get the number of all available assets (sorted for consistency)
+    num_assets = len(all_assets)
+    
+    # Create LOCAL asset index mappings
+    asset_id_to_local_idx = {asset_id: j for j, asset_id in enumerate(all_assets)}
+    asset_local_idx_to_id = {j: asset_id for j, asset_id in enumerate(all_assets)}
+    
+    # Initialize matrix: rows = customers in this set, columns = assets in this set
+    rel_matrix = np.zeros((num_customers, num_assets), dtype=np.float32)
+    
+    # Fill in interaction counts using local indices
     for _, row in transactions.iterrows():
-        if row['customerID'] in customer_idx and row['ISIN'] in asset_idx:
-            i = customer_idx[row['customerID']]
-            j = asset_idx[row['ISIN']]
-            rel_matrix[i, j] = 1.0
+        customer_id = row['customerID']
+        asset_id = row['ISIN']
+        
+        if customer_id in customer_id_to_local_idx and asset_id in asset_id_to_local_idx:
+            local_i = customer_id_to_local_idx[customer_id]  # Local row index
+            local_j = asset_id_to_local_idx[asset_id]        # Local column index
+            rel_matrix[local_i, local_j] += 1.0  # Increment count
     
-    # Create DataFrame with indices
-    rel_df = pd.DataFrame(
-        rel_matrix,
-        index=customers,
-        columns=all_assets
-    )
-    return rel_df
+    # Store index information
+    indices_dict = {
+        'customer_id_to_local_idx': customer_id_to_local_idx,
+        'customer_local_idx_to_id': customer_local_idx_to_id,
+        'asset_id_to_local_idx': asset_id_to_local_idx,
+        'asset_local_idx_to_id': asset_local_idx_to_id,
+        'num_customers_in_set': num_customers,
+        'num_assets_in_set': num_assets
+    }
+    
+    return rel_matrix, indices_dict
 
 def save_datasets(datasets, processed_data_path):
     """
     Save the datasets object to a pickle file.
     
+    The datasets object includes all categorical feature encodings in its metadata,
+    so they are saved together with the datasets.
+    
     Args:
-        datasets: dict containing all dataset variants
+        datasets: dict containing all dataset variants and encodings
         processed_data_path: path to data/processed folder
     """
     datasets_file = os.path.join(processed_data_path, 'datasets.pkl')
@@ -366,16 +622,21 @@ def save_datasets(datasets, processed_data_path):
     file_size_mb = os.path.getsize(datasets_file) / (1024**2)
     print(f"✓ Saved {len(datasets['datasets'])} dataset variants to {datasets_file}")
     print(f"  File size: {file_size_mb:.2f} MB")
-
+    
 def load_datasets(processed_data_path):
     """
     Load all datasets from pickle file.
+    
+    The datasets object includes all categorical feature encodings in its metadata,
+    which can be used to:
+    - Reverse encode categorical features back to original values
+    - Understand the feature encoding during model training
     
     Args:
         processed_data_path: path to data/processed folder
     
     Returns:
-        dict: Complete datasets object with metadata and all variants
+        dict: Complete datasets object with metadata (including encodings) and all variants
     """    
     datasets_file = os.path.join(processed_data_path, 'datasets.pkl')
     
@@ -388,6 +649,47 @@ def load_datasets(processed_data_path):
           f"num_datasets={datasets['metadata']['num_datasets']}")
     
     return datasets
+
+def decode_categorical_value(encoded_value, feature_name, encodings):
+    """
+    Helper function to decode a categorical encoded value back to its original string.
+    
+    Supports all 4 encoding types: customer, asset, transaction, and market features.
+    
+    Args:
+        encoded_value: integer encoded value
+        feature_name: name of the feature (e.g., 'customerType', 'assetCategory', 'transactionType', 'country')
+        encodings: encodings dict from datasets metadata
+    
+    Returns:
+        str: Original categorical value, or "Unknown" if the feature was missing/NaN, 
+             or None if not found
+    """
+    # Check if it's a customer feature
+    if 'customer_mappings' in encodings and feature_name in encodings['customer_mappings']:
+        mapping = encodings['customer_mappings'][feature_name]
+        if isinstance(encoded_value, (int, float)) and int(encoded_value) < len(mapping['categories']):
+            return mapping['categories'][int(encoded_value)]
+    
+    # Check if it's an asset feature
+    if 'asset_mappings' in encodings and feature_name in encodings['asset_mappings']:
+        mapping = encodings['asset_mappings'][feature_name]
+        if isinstance(encoded_value, (int, float)) and int(encoded_value) < len(mapping['categories']):
+            return mapping['categories'][int(encoded_value)]
+    
+    # Check if it's a transaction feature
+    if 'transaction_mappings' in encodings and feature_name in encodings['transaction_mappings']:
+        mapping = encodings['transaction_mappings'][feature_name]
+        if isinstance(encoded_value, (int, float)) and int(encoded_value) < len(mapping['categories']):
+            return mapping['categories'][int(encoded_value)]
+    
+    # Check if it's a market feature
+    if 'market_mappings' in encodings and feature_name in encodings['market_mappings']:
+        mapping = encodings['market_mappings'][feature_name]
+        if isinstance(encoded_value, (int, float)) and int(encoded_value) < len(mapping['categories']):
+            return mapping['categories'][int(encoded_value)]
+    
+    return None
 
 if __name__ == "__main__":
     preprocess_data()
