@@ -51,7 +51,7 @@ We incldue below the information available on each of the files, including file 
         - Predicted_CAP_LT_30K / Predicted_CAP_30K_80K / Predicted_CAP_80K_300K / Predicted_GT300K: Same as earlier, but predicted by an algorithm.
         - Not_Available: Not available data.
     - lastQuestionnaireDate: Date where the risk questionnaire was last completed.
-- timestamp: Timestamp of last update.
+    - timestamp: Timestamp of last update.
     
 ### Asset information
 
