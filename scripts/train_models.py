@@ -13,6 +13,8 @@ from preprocess import load_datasets
 from src.models.popularity import PopularityRecommender
 from src.models.matrix_factorization import MFRecommender
 from src.models.bpr_mf import BPRRecommender
+from src.models.ncf import NCFRecommender
+from src.models.content_based import ContentBasedRecommender
 from src.evaluation.metrics import evaluate_model
 
 K_VALUES = [10, 20]
@@ -23,6 +25,8 @@ MODELS = [
     ("Popularity", PopularityRecommender()),
     ("MF_SVD_50", MFRecommender(n_components=50, n_iter=10, random_state=42)),
     ("BPR_MF", BPRRecommender(embedding_size=64, epochs=20, batch_size=2048, lr=1e-3)),
+    ("NCF", NCFRecommender(embedding_size=64, epochs=10, batch_size=2048, lr=1e-3)),
+    ("ContentBased", ContentBasedRecommender())
 ]
 
 
@@ -37,6 +41,20 @@ def run():
     datasets = load_datasets(processed_data_path)
     variants = datasets["datasets"]
     print(f"Loaded {len(variants)} variants.\n")
+
+    # ------------------------------------------------------------------
+    # Load item (asset) features for Content-Based model
+    # ------------------------------------------------------------------
+
+    asset_path = os.path.join(processed_data_path, "asset_information.csv")
+    asset_df = pd.read_csv(asset_path)
+
+    # Use encoded categorical columns (already processed in preprocess.py)
+    feature_cols = ["assetCategory", "assetSubCategory", "sector", "industry"]
+
+    item_features = asset_df[feature_cols].values.astype(np.float32)
+
+    print(f"Loaded item features: {item_features.shape}")
 
     all_rows = []  # one row per (model, variant)
 
@@ -54,7 +72,10 @@ def run():
             customer_indices = np.arange(train_matrix.shape[0])
 
             # Re-fit fresh model per variant
-            model.fit(train_matrix)
+            if model_name == "ContentBased":
+                model.fit(train_matrix, item_features=item_features)
+            else:
+                model.fit(train_matrix)
 
             # Generate top-MAX_K recommendations for all customers
             recommendations = model.recommend(
