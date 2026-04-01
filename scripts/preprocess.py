@@ -427,6 +427,51 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
     
     print(f"Using encoded value {buy_encoded} for 'Buy' transactions")
     
+    # Create customer_id_to_risk_level mapping at the beginning of dataset generation
+    # This decodes encoded risk levels once instead of repeatedly for each matrix
+    print(f"\nMapping customer risk levels...")
+    customer_id_to_risk_score = {}
+    
+    # Define risk level mapping scheme - maps categorical values to numerical scores
+    categorical_to_score = {
+        'Conservative': 1.0,
+        'Predicted_Conservative': 1.0,
+        'Income': 2.0,
+        'Predicted_Income': 2.0,
+        'Not_Available': 2.0,
+        'Balanced': 3.0,
+        'Predicted_Balanced': 3.0,
+        'Aggressive': 4.0,
+        'Predicted_Aggressive': 4.0
+    }
+    
+    # Get the riskLevel encoder from encodings
+    risk_encoder = None
+    if 'customer_encoders' in encodings and 'riskLevel' in encodings['customer_encoders']:
+        risk_encoder = encodings['customer_encoders']['riskLevel']
+    
+    # Decode and map all customer risk levels
+    for _, row in dataframes['customer_information'].iterrows():
+        customer_id = row['customerID']
+        encoded_risk = row['riskLevel']
+        
+        # Decode the encoded integer value back to categorical string
+        categorical_risk = 'Unknown'  # Default
+        if risk_encoder is not None:
+            try:
+                categorical_risk = risk_encoder.inverse_transform([int(encoded_risk)])[0]
+            except Exception:
+                categorical_risk = 'Unknown'
+        else:
+            # If no encoder, assume the value is already categorical
+            categorical_risk = str(encoded_risk)
+        
+        # Map categorical risk to numerical score
+        risk_score = categorical_to_score.get(categorical_risk, 2.0)  # Default to 2.0 (Income/Unknown)
+        customer_id_to_risk_score[customer_id] = risk_score
+    
+    print(f"✓ Mapped risk levels for {len(customer_id_to_risk_score)} customers")
+    
     # Generate variants
     for idx, t_current in enumerate(time_points):
         # Use all available data prior to the time point for training
@@ -473,35 +518,47 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
             
         # Build count-based interaction matrix for the training transactions
         train_rel_matrix, train_indices = build_rel_matrix(
-            train_transactions, customers=kept_customers, all_assets=all_assets
+            train_transactions, customers=kept_customers, all_assets=all_assets, 
+            customer_risk_scores=customer_id_to_risk_score
         )
         
         # Build count-based interaction matrix for the testing transactions
         test_rel_matrix, test_indices = build_rel_matrix(
-            test_transactions, customers=kept_customers, all_assets=all_assets
+            test_transactions, customers=kept_customers, all_assets=all_assets,
+            customer_risk_scores=customer_id_to_risk_score
         )
         
         # Print a sample row with non-zero values from training matrix
-        # train_sample_printed = False
-        # for i in range(train_rel_matrix.shape[0]):
-        #     if np.any(train_rel_matrix[i, :] > 0):
-        #         customer_id = train_indices['customer_local_idx_to_id'][i]
-        #         nonzero_indices = np.nonzero(train_rel_matrix[i, :])[0]
-        #         asset_values = [(train_indices['asset_local_idx_to_id'][j], train_rel_matrix[i, j]) for j in nonzero_indices]
-        #         print(f"  Sample training row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
-        #         train_sample_printed = True
-        #         break
+        train_sample_printed = False
+        # Get indices of rows with non-zero values
+        train_nonzero_rows = [i for i in range(train_rel_matrix.shape[0]) if np.any(train_rel_matrix[i, :] > 0)]
+        if train_nonzero_rows:
+            # Pick a random row from those with non-zero values
+            i = np.random.choice(train_nonzero_rows)
+            customer_id = train_indices['customer_local_idx_to_id'][i]
+            nonzero_indices = np.nonzero(train_rel_matrix[i, :])[0]
+            asset_values = [(train_indices['asset_local_idx_to_id'][j], train_rel_matrix[i, j]) for j in nonzero_indices]
+            print(f"  Sample training row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
+            # Print risk score for this customer
+            risk_score = train_indices['customer_local_idx_to_risk_score'].get(i, 'Unknown')
+            print(f"    Risk Score: {risk_score}")
+            train_sample_printed = True
         
-        # # Print a sample row with non-zero values from test matrix
-        # test_sample_printed = False
-        # for i in range(test_rel_matrix.shape[0]):
-        #     if np.any(test_rel_matrix[i, :] > 0):
-        #         customer_id = test_indices['customer_local_idx_to_id'][i]
-        #         nonzero_indices = np.nonzero(test_rel_matrix[i, :])[0]
-        #         asset_values = [(test_indices['asset_local_idx_to_id'][j], test_rel_matrix[i, j]) for j in nonzero_indices]
-        #         print(f"  Sample test row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
-        #         test_sample_printed = True
-        #         break
+        # Print a sample row with non-zero values from test matrix
+        test_sample_printed = False
+        # Get indices of rows with non-zero values
+        test_nonzero_rows = [i for i in range(test_rel_matrix.shape[0]) if np.any(test_rel_matrix[i, :] > 0)]
+        if test_nonzero_rows:
+            # Pick a random row from those with non-zero values
+            i = np.random.choice(test_nonzero_rows)
+            customer_id = test_indices['customer_local_idx_to_id'][i]
+            nonzero_indices = np.nonzero(test_rel_matrix[i, :])[0]
+            asset_values = [(test_indices['asset_local_idx_to_id'][j], test_rel_matrix[i, j]) for j in nonzero_indices]
+            print(f"  Sample test row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
+            # Print risk score for this customer
+            risk_score = test_indices['customer_local_idx_to_risk_score'].get(i, 'Unknown')
+            print(f"    Risk Score: {risk_score}")
+            test_sample_printed = True
         
         # Store variant information
         variant_info = {
@@ -533,7 +590,7 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
     
     return datasets
 
-def build_rel_matrix(transactions, customers, all_assets):
+def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=None):
     """
     Build a count-based relevance matrix (Rel) with local indexing for both customers and assets.
     
@@ -547,6 +604,7 @@ def build_rel_matrix(transactions, customers, all_assets):
         transactions: Transactions DataFrame with columns [customerID, ISIN]
         customers: set of customer IDs to include
         all_assets: list of all available unique asset ISINs
+        customer_risk_scores: Optional dict mapping {customerID -> risk_score} from pre-computed mapping
     
     Returns:
         tuple: (rel_matrix, indices_dict) where:
@@ -561,6 +619,7 @@ def build_rel_matrix(transactions, customers, all_assets):
                 - 'asset_local_idx_to_id': Local {local column index -> assetISIN}
                 - 'num_customers_in_set': Number of customers in this set
                 - 'num_assets_in_set': Number of assets in this set
+                - 'customer_idx_to_risk_score': Mapping {local customer index -> risk_score}
     """
     # The customers with transactions both in the training and test transactions subsets
     customers_in_set = sorted(list(customers))
@@ -569,6 +628,16 @@ def build_rel_matrix(transactions, customers, all_assets):
     # Create LOCAL customer index mappings
     customer_id_to_local_idx = {cid: i for i, cid in enumerate(customers_in_set)}
     customer_local_idx_to_id = {i: cid for i, cid in enumerate(customers_in_set)}
+    
+    # Create customer_id_to_risk_level mapping using pre-computed mapping if provided
+    customer_local_idx_to_risk_score = {}
+    if customer_risk_scores is not None:
+        for customer_id in customers_in_set:
+            if customer_id in customer_risk_scores:
+                risk_score = customer_risk_scores[customer_id]
+                # Create mapping from local index to risk score
+                local_idx = customer_id_to_local_idx[customer_id]
+                customer_local_idx_to_risk_score[local_idx] = risk_score
     
     # Get the number of all available assets (sorted for consistency)
     num_assets = len(all_assets)
@@ -594,10 +663,11 @@ def build_rel_matrix(transactions, customers, all_assets):
     indices_dict = {
         'customer_id_to_local_idx': customer_id_to_local_idx,
         'customer_local_idx_to_id': customer_local_idx_to_id,
+        'customer_local_idx_to_risk_score': customer_local_idx_to_risk_score,
         'asset_id_to_local_idx': asset_id_to_local_idx,
         'asset_local_idx_to_id': asset_local_idx_to_id,
         'num_customers_in_set': num_customers,
-        'num_assets_in_set': num_assets
+        'num_assets_in_set': num_assets,
     }
     
     return rel_matrix, indices_dict
