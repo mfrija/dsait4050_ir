@@ -19,7 +19,6 @@ from src.evaluation.metrics import evaluate_model
 
 K_VALUES = [10, 20]
 MAX_K = max(K_VALUES)
-NUM_ITEMS = 837
 
 MODELS = [
     ("Popularity", PopularityRecommender()),
@@ -67,9 +66,12 @@ def run():
             variant_id = variant["variant_id"]
             train_matrix = variant["train_rel_matrix"]
             test_matrix = variant["test_rel_matrix"]
+            train_indices = variant["train_indices"]
 
             # Customer indices are the same for train and test (guaranteed by preprocess.py)
             customer_indices = np.arange(train_matrix.shape[0])
+            customer_risk_scores = train_indices["customer_local_idx_to_risk_score"]
+            asset_risk_scores = train_indices["asset_local_idx_to_risk_score"]
 
             # Re-fit fresh model per variant
             if model_name == "ContentBased":
@@ -82,10 +84,14 @@ def run():
                 train_matrix, customer_indices, k=MAX_K, exclude_seen=True
             )
 
+            NUM_ITEMS = train_matrix.shape[1]
+
             metrics = evaluate_model(
                 recommendations=recommendations,
                 test_matrix=test_matrix,
                 customer_indices=customer_indices,
+                customer_risk_scores=customer_risk_scores,
+                asset_risk_scores=asset_risk_scores,
                 num_items=NUM_ITEMS,
                 k_values=K_VALUES,
             )
@@ -93,7 +99,8 @@ def run():
             row = {"model": model_name, "variant_id": variant_id, **metrics}
             all_rows.append(row)
 
-            print(f"  Variant {variant_id:2d}: NDCG@10={metrics.get('ndcg@10', 0):.4f}  NDCG@20={metrics.get('ndcg@20', 0):.4f}")
+            print(f"  Variant {variant_id:2d}: NDCG@10={metrics.get('ndcg@10', 0):.4f}  NDCG@20={metrics.get('ndcg@20', 0):.4f}"
+                  f"  Variant {variant_id:2d}: RiskAlignment@10={metrics.get('risk_fit@10', 0):.4f}  RiskAlignment@20={metrics.get('risk_fit@20', 0):.4f}")
 
         print()
 
@@ -119,6 +126,8 @@ def run():
             f"  NDCG@20={row.get('ndcg@20', 0):.4f}"
             f"  Coverage={row.get('catalog_coverage', 0):.3f}"
             f"  Gini={row.get('gini_index', 0):.3f}"
+            f"  RiskAlignment@10={row.get('risk_fit@10', 0):.4f}"
+            f"  RiskAlignment@20={row.get('risk_fit@20', 0):.4f}"
         )
 
     print(f"\nResults saved to {results_path}")

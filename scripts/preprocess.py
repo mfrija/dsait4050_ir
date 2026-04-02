@@ -519,7 +519,8 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
         # Build count-based interaction matrix for the training transactions
         train_rel_matrix, train_indices = build_rel_matrix(
             train_transactions, customers=kept_customers, all_assets=all_assets, 
-            customer_risk_scores=customer_id_to_risk_score
+            customer_risk_scores=customer_id_to_risk_score,
+            get_asset_risk_scores=True
         )
         
         # Build count-based interaction matrix for the testing transactions
@@ -541,8 +542,15 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
             print(f"  Sample training row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
             # Print risk score for this customer
             risk_score = train_indices['customer_local_idx_to_risk_score'].get(i, 'Unknown')
-            print(f"    Risk Score: {risk_score}")
+            print(f"    Customer Risk Score: {risk_score}")
+            # Print proxy risk scores for assets purchased by this customer
+            asset_risk_scores = [train_indices['asset_local_idx_to_risk_score'].get(j, 'Unknown') for j in nonzero_indices[:3]]
+            print(f"    Asset Proxy Risk Scores: {asset_risk_scores}")
             train_sample_printed = True
+        
+        # Print size of asset_local_idx_to_risk_score mapping
+        asset_risk_score_size = len(train_indices['asset_local_idx_to_risk_score'])
+        print(f"  Asset Risk Score Index Size: {asset_risk_score_size}")
         
         # Print a sample row with non-zero values from test matrix
         test_sample_printed = False
@@ -557,7 +565,10 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
             print(f"  Sample test row - Customer {customer_id}: {asset_values[:3]}")  # Print first 3 assets
             # Print risk score for this customer
             risk_score = test_indices['customer_local_idx_to_risk_score'].get(i, 'Unknown')
-            print(f"    Risk Score: {risk_score}")
+            print(f"    Customer Risk Score: {risk_score}")
+            # Print proxy risk scores for assets purchased by this customer
+            asset_risk_scores = [test_indices['asset_local_idx_to_risk_score'].get(j, 'Unknown') for j in nonzero_indices[:3]]
+            print(f"    Asset Proxy Risk Scores: {asset_risk_scores}")
             test_sample_printed = True
         
         # Store variant information
@@ -590,7 +601,7 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
     
     return datasets
 
-def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=None):
+def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=None, get_asset_risk_scores=False):
     """
     Build a count-based relevance matrix (Rel) with local indexing for both customers and assets.
     
@@ -619,7 +630,8 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
                 - 'asset_local_idx_to_id': Local {local column index -> assetISIN}
                 - 'num_customers_in_set': Number of customers in this set
                 - 'num_assets_in_set': Number of assets in this set
-                - 'customer_idx_to_risk_score': Mapping {local customer index -> risk_score}
+                - 'customer_local_idx_to_risk_score': Mapping {local customer index -> risk_score}
+                - 'asset_local_idx_to_risk_score': Proxy risk score for each asset {local asset index -> proxy_risk_score}
     """
     # The customers with transactions both in the training and test transactions subsets
     customers_in_set = sorted(list(customers))
@@ -659,6 +671,40 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
             local_j = asset_id_to_local_idx[asset_id]        # Local column index
             rel_matrix[local_i, local_j] += 1.0  # Increment count
     
+    # Compute proxy risk score for each asset
+    asset_local_idx_to_risk_score = {}
+    if get_asset_risk_scores:
+        if len(customer_local_idx_to_risk_score) > 0:
+            # Risk score values used for weighting
+            risk_score_values = [1.0, 2.0, 3.0, 4.0]
+            
+            # For each asset (column in the matrix)
+            for asset_local_idx in list(asset_local_idx_to_id.keys()):
+                # Find customers who bought this asset (non-zero entries in this column)
+                customers_who_bought = np.nonzero(rel_matrix[:, asset_local_idx])[0]
+                
+                if len(customers_who_bought) > 0:
+                    # Get risk scores for these customers
+                    risk_scores_for_asset = [
+                        customer_local_idx_to_risk_score.get(customer_local_idx, 2.0) 
+                        for customer_local_idx in customers_who_bought
+                    ]
+                    
+                    # Count proportion of each risk score
+                    total_customers = len(risk_scores_for_asset)
+                    proportions = {}
+                    for score in risk_score_values:
+                        count = sum(1 for rs in risk_scores_for_asset if rs == score)
+                        proportions[score] = count / total_customers
+                    
+                    # Compute weighted sum as proxy risk score
+                    proxy_risk = sum(score * proportions[score] for score in risk_score_values)
+                    asset_local_idx_to_risk_score[asset_local_idx] = proxy_risk
+                else:
+                    # We assume a neutral risk profile for assets without any past acquisitions
+                    proxy_risk = 2.0
+                    asset_local_idx_to_risk_score[asset_local_idx] = proxy_risk
+    
     # Store index information
     indices_dict = {
         'customer_id_to_local_idx': customer_id_to_local_idx,
@@ -666,6 +712,7 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
         'customer_local_idx_to_risk_score': customer_local_idx_to_risk_score,
         'asset_id_to_local_idx': asset_id_to_local_idx,
         'asset_local_idx_to_id': asset_local_idx_to_id,
+        'asset_local_idx_to_risk_score': asset_local_idx_to_risk_score,
         'num_customers_in_set': num_customers,
         'num_assets_in_set': num_assets,
     }
