@@ -24,6 +24,9 @@ def risk_fit_at_k(recommendations_risk_scores: np.ndarray, customer_risk_score: 
     risk_fit = risk_fit/normalization_factor
     assert risk_fit <= 1.0 , f"Risk Fit: {risk_fit}"
     return risk_fit
+
+def rec_popularity_at_k(recommendations_popularity_scores: np.ndarray, k: int) -> float:
+    return np.sum(recommendations_popularity_scores[:k])/k
     
 
 # ---------------------------------------------------------------------------
@@ -57,6 +60,7 @@ def evaluate_model(
     customer_indices: np.ndarray,
     customer_risk_scores: dict,
     asset_risk_scores: dict,
+    asset_popularity: dict,
     num_items: int,
     k_values=(10, 20)
 ) -> dict:
@@ -68,6 +72,7 @@ def evaluate_model(
     max_k = max(k_values)
     per_user_ndcg_at_k: dict[int, list] = {k: [] for k in k_values}
     per_user_risk_fit_at_k: dict[int, list] = {k: [] for k in k_values}
+    per_user_rec_pop_at_k: dict[int, list] = {k: [] for k in k_values}
 
     for i, cust_idx in enumerate(customer_indices):
         relevant = set(np.where(np.asarray(test_matrix[cust_idx]).flatten() > 0)[0])
@@ -76,6 +81,7 @@ def evaluate_model(
             continue
         recs = recommendations[i]
         recs_risk_scores = np.asarray([asset_risk_scores[int(idx)] for idx in recs])
+        recs_pop_scores = np.asanyarray([asset_popularity[int(idx)] for idx in recs])
         for k in k_values:
             per_user_ndcg_at_k[k].append(ndcg_at_k(recommendations=recs, 
                                                    relevant_items=relevant,
@@ -83,11 +89,14 @@ def evaluate_model(
             per_user_risk_fit_at_k[k].append(risk_fit_at_k(recommendations_risk_scores=recs_risk_scores, 
                                                            customer_risk_score=cust_risk_score, 
                                                            k=k))
+            per_user_rec_pop_at_k[k].append(rec_popularity_at_k(recommendations_popularity_scores=recs_pop_scores,
+                                                                k=k))
 
     results = {}
     for k in k_values:
         results[f"ndcg@{k}"] = float(np.mean(per_user_ndcg_at_k[k])) if per_user_ndcg_at_k[k] else 0.0
         results[f"risk_fit@{k}"] = float(np.mean(per_user_risk_fit_at_k[k])) if per_user_risk_fit_at_k[k] else 0.0
+        results[f"rec_pop@{k}"] = float(np.mean(per_user_rec_pop_at_k[k])) if per_user_rec_pop_at_k[k] else 0.0
 
     results["gini_index"] = gini_index(recommendations[:, :max_k], num_items)
     results["catalog_coverage"] = catalog_coverage(recommendations[:, :max_k], num_items)

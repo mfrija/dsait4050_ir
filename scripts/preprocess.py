@@ -546,6 +546,8 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
             # Print proxy risk scores for assets purchased by this customer
             asset_risk_scores = [train_indices['asset_local_idx_to_risk_score'].get(j, 'Unknown') for j in nonzero_indices[:3]]
             print(f"    Asset Proxy Risk Scores: {asset_risk_scores}")
+            asset_popularity = [train_indices['asset_local_idx_to_popularity'].get(j, 'Unknown') for j in nonzero_indices[:3]]
+            print(f"    Asset Popularity: {asset_popularity}")
             train_sample_printed = True
         
         # Print size of asset_local_idx_to_risk_score mapping
@@ -566,9 +568,6 @@ def generate_datasets(dataframes, processed_data_path, encodings, num_variants=3
             # Print risk score for this customer
             risk_score = test_indices['customer_local_idx_to_risk_score'].get(i, 'Unknown')
             print(f"    Customer Risk Score: {risk_score}")
-            # Print proxy risk scores for assets purchased by this customer
-            asset_risk_scores = [test_indices['asset_local_idx_to_risk_score'].get(j, 'Unknown') for j in nonzero_indices[:3]]
-            print(f"    Asset Proxy Risk Scores: {asset_risk_scores}")
             test_sample_printed = True
         
         # Store variant information
@@ -632,6 +631,7 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
                 - 'num_assets_in_set': Number of assets in this set
                 - 'customer_local_idx_to_risk_score': Mapping {local customer index -> risk_score}
                 - 'asset_local_idx_to_risk_score': Proxy risk score for each asset {local asset index -> proxy_risk_score}
+                - 'asset_local_idx_to_popularity': Popularity score for each asset {local asset index -> popularity_ratio}
     """
     # The customers with transactions both in the training and test transactions subsets
     customers_in_set = sorted(list(customers))
@@ -673,6 +673,7 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
     
     # Compute proxy risk score for each asset
     asset_local_idx_to_risk_score = {}
+    asset_local_idx_to_popularity = {}
     if get_asset_risk_scores:
         if len(customer_local_idx_to_risk_score) > 0:
             # Risk score values used for weighting
@@ -700,10 +701,16 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
                     # Compute weighted sum as proxy risk score
                     proxy_risk = sum(score * proportions[score] for score in risk_score_values)
                     asset_local_idx_to_risk_score[asset_local_idx] = proxy_risk
+                    
+                    # Compute popularity: ratio of unique customers to total customers
+                    unique_customers_count = len(customers_who_bought)
+                    popularity = np.log(unique_customers_count+1)
+                    asset_local_idx_to_popularity[asset_local_idx] = popularity
                 else:
                     # We assume a neutral risk profile for assets without any past acquisitions
                     proxy_risk = 2.0
                     asset_local_idx_to_risk_score[asset_local_idx] = proxy_risk
+                    asset_local_idx_to_popularity[asset_local_idx] = 0.0
     
     # Store index information
     indices_dict = {
@@ -713,6 +720,7 @@ def build_rel_matrix(transactions, customers, all_assets, customer_risk_scores=N
         'asset_id_to_local_idx': asset_id_to_local_idx,
         'asset_local_idx_to_id': asset_local_idx_to_id,
         'asset_local_idx_to_risk_score': asset_local_idx_to_risk_score,
+        'asset_local_idx_to_popularity': asset_local_idx_to_popularity,
         'num_customers_in_set': num_customers,
         'num_assets_in_set': num_assets,
     }

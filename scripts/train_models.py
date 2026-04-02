@@ -31,8 +31,16 @@ MODELS = [
 
 def run():
     processed_data_path = os.path.join(_repo_root, "data", "processed")
-    results_path = os.path.join(_repo_root, "data", "results")
+    results_path = os.path.join(_repo_root, "results")
     os.makedirs(results_path, exist_ok=True)
+
+    # Count existing experiment folders and create a new one
+    existing_folders = [d for d in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, d)) and d.startswith("Experiment")]
+    experiment_num = len(existing_folders) + 1
+    experiment_path = os.path.join(results_path, f"Experiment {experiment_num}")
+    os.makedirs(experiment_path, exist_ok=True)
+    
+    print(f"\nSaving results to: {experiment_path}\n")
 
     print("\n" + "=" * 70)
     print("LOADING DATASETS")
@@ -72,6 +80,7 @@ def run():
             customer_indices = np.arange(train_matrix.shape[0])
             customer_risk_scores = train_indices["customer_local_idx_to_risk_score"]
             asset_risk_scores = train_indices["asset_local_idx_to_risk_score"]
+            asset_popularity = train_indices["asset_local_idx_to_popularity"]
 
             # Re-fit fresh model per variant
             if model_name == "ContentBased":
@@ -92,6 +101,7 @@ def run():
                 customer_indices=customer_indices,
                 customer_risk_scores=customer_risk_scores,
                 asset_risk_scores=asset_risk_scores,
+                asset_popularity=asset_popularity,
                 num_items=NUM_ITEMS,
                 k_values=K_VALUES,
             )
@@ -100,37 +110,43 @@ def run():
             all_rows.append(row)
 
             print(f"  Variant {variant_id:2d}: NDCG@10={metrics.get('ndcg@10', 0):.4f}  NDCG@20={metrics.get('ndcg@20', 0):.4f}"
-                  f"  Variant {variant_id:2d}: RiskAlignment@10={metrics.get('risk_fit@10', 0):.4f}  RiskAlignment@20={metrics.get('risk_fit@20', 0):.4f}")
+                  f"  Variant {variant_id:2d}: RiskAlignment@10={metrics.get('risk_fit@10', 0):.4f}  RiskAlignment@20={metrics.get('risk_fit@20', 0):.4f}"
+                  f"  Variant {variant_id:2d}: RecPopularity@10={metrics.get('rec_pop@10', 0):.4f}  RecPopularity@20={metrics.get('rec_pop@20', 0):.4f}")
+
 
         print()
 
     # Save per-variant CSV
     df = pd.DataFrame(all_rows)
-    per_variant_path = os.path.join(results_path, "metrics_per_variant.csv")
+    per_variant_path = os.path.join(experiment_path, "metrics_per_variant.csv")
     df.to_csv(per_variant_path, index=False)
 
-    # Aggregate: mean over variants
+    # Aggregate: mean and std over variants
     metric_cols = [c for c in df.columns if c not in ("model", "variant_id")]
-    summary = df.groupby("model")[metric_cols].mean().reset_index()
-    summary_path = os.path.join(results_path, "metrics_summary.csv")
+    summary = df.groupby("model")[metric_cols].agg(['mean', 'std']).reset_index()
+    # Flatten multi-level column index
+    summary.columns = ['_'.join(col).strip('_') if col[1] else col[0] for col in summary.columns.values]
+    summary_path = os.path.join(experiment_path, "metrics_summary.csv")
     summary.to_csv(summary_path, index=False)
 
     # Print summary table
     print("\n" + "=" * 70)
-    print("SUMMARY (mean across variants)")
+    print("SUMMARY (mean ± std across variants)")
     print("=" * 70)
     for _, row in summary.iterrows():
         print(
             f"  {row['model']:<15}"
-            f"  NDCG@10={row.get('ndcg@10', 0):.4f}"
-            f"  NDCG@20={row.get('ndcg@20', 0):.4f}"
-            f"  Coverage={row.get('catalog_coverage', 0):.3f}"
-            f"  Gini={row.get('gini_index', 0):.3f}"
-            f"  RiskAlignment@10={row.get('risk_fit@10', 0):.4f}"
-            f"  RiskAlignment@20={row.get('risk_fit@20', 0):.4f}"
+            f"  NDCG@10={row.get('ndcg@10_mean', 0):.4f}±{row.get('ndcg@10_std', 0):.4f}"
+            f"  NDCG@20={row.get('ndcg@20_mean', 0):.4f}±{row.get('ndcg@20_std', 0):.4f}"
+            f"  Coverage={row.get('catalog_coverage_mean', 0):.3f}±{row.get('catalog_coverage_std', 0):.3f}"
+            f"  Gini={row.get('gini_index_mean', 0):.3f}±{row.get('gini_index_std', 0):.3f}"
+            f"  ARP@10={row.get('rec_pop@10_mean', 0):.3f}±{row.get('rec_pop@10_std', 0):.3f}"
+            f"  ARP@20={row.get('rec_pop@20_mean', 0):.3f}±{row.get('rec_pop@20_std', 0):.3f}"
+            f"  RiskAlignment@10={row.get('risk_fit@10_mean', 0):.4f}±{row.get('risk_fit@10_std', 0):.4f}"
+            f"  RiskAlignment@20={row.get('risk_fit@20_mean', 0):.4f}±{row.get('risk_fit@20_std', 0):.4f}"
         )
 
-    print(f"\nResults saved to {results_path}")
+    print(f"\nResults saved to {experiment_path}")
 
 
 if __name__ == "__main__":
