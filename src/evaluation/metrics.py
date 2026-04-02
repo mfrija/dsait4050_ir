@@ -16,6 +16,15 @@ def ndcg_at_k(recommendations: np.ndarray, relevant_items: Set[int], k: int) -> 
     idcg = sum(1.0 / np.log2(rank + 2) for rank in range(ideal_hits))
     return dcg / idcg if idcg > 0 else 0.0
 
+def risk_fit_at_k(recommendations_risk_scores: np.ndarray, customer_risk_score: float, k: int) -> float:
+    risk_fit = np.sum(
+        [(1.0/np.log2(rank+2))*(1.0-(r_a - customer_risk_score)/3.0) if (r_a > customer_risk_score) else (1.0/np.log2(rank+2)) for rank, r_a in enumerate(recommendations_risk_scores[:k])]
+    )
+    normalization_factor = np.sum([(1.0/np.log2(rank+2)) for rank, _ in enumerate(recommendations_risk_scores[:k])])
+    risk_fit = risk_fit/normalization_factor
+    assert risk_fit <= 1.0 , f"Risk Fit: {risk_fit}"
+    return risk_fit
+    
 
 # ---------------------------------------------------------------------------
 # System-level beyond-accuracy metrics
@@ -46,28 +55,39 @@ def evaluate_model(
     recommendations: np.ndarray,
     test_matrix: np.ndarray,
     customer_indices: np.ndarray,
+    customer_risk_scores: dict,
+    asset_risk_scores: dict,
     num_items: int,
-    k_values=(10, 20),
+    k_values=(10, 20)
 ) -> dict:
     """Evaluate recommendations against held-out test interactions.
 
-    Returns keys: ndcg@10, ndcg@20, gini_index, catalog_coverage.
+    Returns keys: ndcg@10, ndcg@20, risk_fit@10, risk_fit@20, gini_index, catalog_coverage.
     System-level metrics are computed at max(k_values).
     """
     max_k = max(k_values)
-    per_user: dict[int, list] = {k: [] for k in k_values}
+    per_user_ndcg_at_k: dict[int, list] = {k: [] for k in k_values}
+    per_user_risk_fit_at_k: dict[int, list] = {k: [] for k in k_values}
 
     for i, cust_idx in enumerate(customer_indices):
         relevant = set(np.where(np.asarray(test_matrix[cust_idx]).flatten() > 0)[0])
+        cust_risk_score = customer_risk_scores[cust_idx]
         if not relevant:
             continue
         recs = recommendations[i]
+        recs_risk_scores = np.asarray([asset_risk_scores[int(idx)] for idx in recs])
         for k in k_values:
-            per_user[k].append(ndcg_at_k(recs, relevant, k))
+            per_user_ndcg_at_k[k].append(ndcg_at_k(recommendations=recs, 
+                                                   relevant_items=relevant,
+                                                   k=k))
+            per_user_risk_fit_at_k[k].append(risk_fit_at_k(recommendations_risk_scores=recs_risk_scores, 
+                                                           customer_risk_score=cust_risk_score, 
+                                                           k=k))
 
     results = {}
     for k in k_values:
-        results[f"ndcg@{k}"] = float(np.mean(per_user[k])) if per_user[k] else 0.0
+        results[f"ndcg@{k}"] = float(np.mean(per_user_ndcg_at_k[k])) if per_user_ndcg_at_k[k] else 0.0
+        results[f"risk_fit@{k}"] = float(np.mean(per_user_risk_fit_at_k[k])) if per_user_risk_fit_at_k[k] else 0.0
 
     results["gini_index"] = gini_index(recommendations[:, :max_k], num_items)
     results["catalog_coverage"] = catalog_coverage(recommendations[:, :max_k], num_items)
