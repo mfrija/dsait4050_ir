@@ -128,6 +128,14 @@ def run():
     summary.columns = ['_'.join(col).strip('_') if col[1] else col[0] for col in summary.columns.values]
     summary_path = os.path.join(experiment_path, "metrics_summary.csv")
     summary.to_csv(summary_path, index=False)
+    
+    # Create markdown summary
+    markdown_path = os.path.join(experiment_path, "results_summary.md")
+    with open(markdown_path, 'w') as f:
+        f.write("# Experiment Results Summary\n\n")
+        f.write(summary.to_markdown(index=False))
+    
+    print(f"Markdown summary saved to {markdown_path}")
 
     # Print summary table
     print("\n" + "=" * 70)

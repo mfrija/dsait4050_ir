@@ -343,7 +343,7 @@ def preprocess_data():
     
     print("\n✓ Preprocessing complete! Use load_datasets() to load datasets for training.")
 
-def generate_datasets(dataframes, processed_data_path, encodings, num_variants=30):
+def generate_datasets(dataframes, processed_data_path, encodings, num_variants=50):
     """
     Generate time-based dataset variants following the FAR-Trans paper's methodology.
     
