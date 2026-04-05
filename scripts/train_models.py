@@ -123,33 +123,42 @@ def run():
     df.to_csv(per_variant_path, index=False)
 
     print("\n" + "=" * 70)
-    print("STATISTICAL SIGNIFICANCE (t-test + Wilcoxon)")
+    print("STATISTICAL SIGNIFICANCE (Wilcoxon signed-rank test)")
     print("=" * 70)
 
-    metric = "ndcg@10"
+    # All metric columns (exclude identifiers)
+    metric_cols = [c for c in df.columns if c not in ("model", "variant_id")]
     models = df["model"].unique()
 
-    for i in range(len(models)):
-        for j in range(i + 1, len(models)):
-            m1, m2 = models[i], models[j]
+    rows = []
 
-            scores_1 = df[df["model"] == m1][metric].values
-            scores_2 = df[df["model"] == m2][metric].values
+    for metric in metric_cols:
+        for i in range(len(models)):
+            for j in range(i + 1, len(models)):
+                m1, m2 = models[i], models[j]
 
-            # Paired t-test
-            _, p_t = ttest_rel(scores_1, scores_2)
+                scores_1 = df[df["model"] == m1][metric].values
+                scores_2 = df[df["model"] == m2][metric].values
 
-            # Wilcoxon signed-rank test
-            try:
-                _, p_w = wilcoxon(scores_1, scores_2)
-            except ValueError:
-                p_w = np.nan  # happens if all differences are zero
+                try:
+                    w_stat, p_value = wilcoxon(scores_1, scores_2)
+                except ValueError:
+                    w_stat, p_value = np.nan, np.nan  # e.g., identical scores
 
-            print(
-                f"{m1:15} vs {m2:15} | "
-                f"t-test p={p_t:.6f} | "
-                f"wilcoxon p={p_w:.6f}"
-            )
+                rows.append({
+                    "metric": metric,
+                    "model_1": m1,
+                    "model_2": m2,
+                    "W": w_stat,
+                    "p_value": p_value
+                })
+
+    # Create table
+    wilcoxon_df = pd.DataFrame(rows)
+
+    # Pretty print
+    print("\nWilcoxon Results:")
+    print(wilcoxon_df.to_string(index=False))
 
     # Aggregate: mean and std over variants
     metric_cols = [c for c in df.columns if c not in ("model", "variant_id")]
