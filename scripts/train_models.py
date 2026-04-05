@@ -10,6 +10,7 @@ sys.path.insert(0, _repo_root)
 sys.path.insert(0, _scripts_dir)
 
 from preprocess import load_datasets
+from scipy.stats import ttest_rel
 from src.models.popularity import PopularityRecommender
 from src.models.matrix_factorization import MFRecommender
 from src.models.bpr_mf import BPRRecommender
@@ -120,6 +121,27 @@ def run():
     df = pd.DataFrame(all_rows)
     per_variant_path = os.path.join(experiment_path, "metrics_per_variant.csv")
     df.to_csv(per_variant_path, index=False)
+
+    print("\n" + "=" * 70)
+    print("STATISTICAL SIGNIFICANCE (paired t-test)")
+    print("=" * 70)
+
+    # Choose metric to compare
+    metric = "ndcg@10"
+
+    models = df["model"].unique()
+
+    for i in range(len(models)):
+        for j in range(i + 1, len(models)):
+            m1, m2 = models[i], models[j]
+
+            scores_1 = df[df["model"] == m1][metric].values
+            scores_2 = df[df["model"] == m2][metric].values
+
+            # Paired t-test
+            t_stat, p_value = ttest_rel(scores_1, scores_2)
+
+            print(f"{m1:15} vs {m2:15} | p-value = {p_value:.6f}")
 
     # Aggregate: mean and std over variants
     metric_cols = [c for c in df.columns if c not in ("model", "variant_id")]
