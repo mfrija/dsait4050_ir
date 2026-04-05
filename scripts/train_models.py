@@ -10,7 +10,7 @@ sys.path.insert(0, _repo_root)
 sys.path.insert(0, _scripts_dir)
 
 from preprocess import load_datasets
-from scipy.stats import ttest_rel
+from scipy.stats import ttest_rel, wilcoxon
 from src.models.popularity import PopularityRecommender
 from src.models.matrix_factorization import MFRecommender
 from src.models.bpr_mf import BPRRecommender
@@ -123,12 +123,10 @@ def run():
     df.to_csv(per_variant_path, index=False)
 
     print("\n" + "=" * 70)
-    print("STATISTICAL SIGNIFICANCE (paired t-test)")
+    print("STATISTICAL SIGNIFICANCE (t-test + Wilcoxon)")
     print("=" * 70)
 
-    # Choose metric to compare
     metric = "ndcg@10"
-
     models = df["model"].unique()
 
     for i in range(len(models)):
@@ -139,9 +137,19 @@ def run():
             scores_2 = df[df["model"] == m2][metric].values
 
             # Paired t-test
-            t_stat, p_value = ttest_rel(scores_1, scores_2)
+            _, p_t = ttest_rel(scores_1, scores_2)
 
-            print(f"{m1:15} vs {m2:15} | p-value = {p_value:.6f}")
+            # Wilcoxon signed-rank test
+            try:
+                _, p_w = wilcoxon(scores_1, scores_2)
+            except ValueError:
+                p_w = np.nan  # happens if all differences are zero
+
+            print(
+                f"{m1:15} vs {m2:15} | "
+                f"t-test p={p_t:.6f} | "
+                f"wilcoxon p={p_w:.6f}"
+            )
 
     # Aggregate: mean and std over variants
     metric_cols = [c for c in df.columns if c not in ("model", "variant_id")]
